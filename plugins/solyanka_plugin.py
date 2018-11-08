@@ -1,15 +1,15 @@
 '''
 
-Plugin for merging multiple m3u playlist.
+Plugin for merging multiple m3u playlist into one.
 Tv guid and grouping will work only for first playlist. Other playlists will be grouped by url hostname, eg "www.example.tv"
 
-To access merged playlist, go to http://127.0.0.1:8000/solyanka.m3u
+To access merged playlist, go to http://127.0.0.1:8000/solyanka/playlist.m3u
 '''
 from modules.PluginInterface import AceProxyPlugin
 
 import requests
 import time
-from itertools import chain
+import zlib
 
 try:
     from urlparse import urlparse
@@ -31,7 +31,7 @@ class Solyanka(AceProxyPlugin):
         def minify_extinf(extinf: bytes):
             splitted = extinf.split(b',')
             name = splitted[1] if len(splitted) >= 2 else b'no name'
-            return b'#EXTINF:-1 group-title="%b", %b' % (header, name)
+            return b'#EXTINF:-1 group-title="%b",%b' % (header, name)
 
         by_lines = m3u.splitlines()
         transformed = []
@@ -57,23 +57,38 @@ class Solyanka(AceProxyPlugin):
         tail_playlists = list(map(lambda x: self.download_playlist(x, tail=True), tail))
         summary_playlists = [head_playlist] + tail_playlists
         Solyanka.playlist = b'\n'.join(summary_playlists)
-        # TODO not efficient
         return next((x for x in Solyanka.playlist.split(b'\n') if x.startswith(b'http')), None) is not None
 
     def handle(self, connection, headers_only=False):
-        connection.send_response(200)
 
-        if headers_only:
-            connection.send_header('Connection', 'close')
-            connection.end_headers()
-            return
+        url = requests.compat.urlparse(connection.path)
+        path = url.path[0:-1] if url.path.endswith('/') else url.path
 
-        # 15 minutes cache
-        if Solyanka.playlist is None or (int(time.time()) - Solyanka.playlisttime > 15 * 60):
+        # 20 minutes cache
+        if Solyanka.playlist is None or (int(time.time()) - Solyanka.playlisttime > 20 * 60):
             if not self.collect_playlists(): connection.dieWithError(); return
 
-        connection.send_header('Content-type', 'text/plain; charset=utf-8')
-        connection.send_header('Content-Length', len(Solyanka.playlist))
-        connection.end_headers()
 
-        connection.wfile.write(Solyanka.playlist)
+        if path == '/solyanka/playlist.m3u':
+            data = Solyanka.playlist
+            #TODO not modified status
+            connection.send_response(200)
+            connection.send_header('Content-Type', 'audio/mpegurl; charset=utf-8')
+            try:
+                h = connection.headers.get('Accept-Encoding').split(',')[0]
+                compress_method = {'zlib': zlib.compressobj(9, zlib.DEFLATED, zlib.MAX_WBITS),
+                                   'deflate': zlib.compressobj(9, zlib.DEFLATED, -zlib.MAX_WBITS),
+                                   'gzip': zlib.compressobj(9, zlib.DEFLATED, zlib.MAX_WBITS | 16)}
+                data = compress_method[h].compress(data) + compress_method[h].flush()
+                connection.send_header('Content-Encoding', h)
+            except:
+                pass
+            connection.send_header('Content-Length', len(data))
+            connection.send_header('Connection', 'close')
+            connection.end_headers()
+
+            connection.wfile.write(data)
+        else:
+            connection.send_response(400)
+            connection.send_header('Connection', 'close')
+            connection.end_headers()
