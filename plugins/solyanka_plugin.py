@@ -27,20 +27,27 @@ class Solyanka(AceProxyPlugin):
     def __init__(self, AceConfig, AceStuff):
         pass
 
-    def prepare_tail_m3u(self, header: bytes, m3u: bytes):
-        def minify_extinf(extinf: bytes):
+    def prepare_m3u(self, header: bytes, m3u: bytes, tail: bool):
+
+        def update_extinf(extinf: bytes):
             splitted = extinf.split(b',')
             name = splitted[1] if len(splitted) >= 2 else b'no name'
-            return b'#EXTINF:-1 group-title="%b",%b' % (header, name)
+            if b'group-title' not in ext_inf.lower() or tail:
+                return b'#EXTINF:-1 group-title="%b",%b' % (header, name)
+            else:
+                return ext_inf
 
         by_lines = m3u.splitlines()
         transformed = []
         for line in by_lines:
             if line.startswith(b'#EXTINF'):
-                ext_inf = minify_extinf(line)
+                ext_inf = update_extinf(line)
                 transformed.append(ext_inf)
-                transformed.append(b"#EXTGRP:%b" % header)
+                if tail:
+                    transformed.append(b"#EXTGRP:%b" % header)
             elif line.startswith(b'http'):
+                transformed.append(line)
+            elif line.startswith(b'#EXTM3U') and not tail:
                 transformed.append(line)
         return b'\n'.join(transformed)
 
@@ -48,7 +55,7 @@ class Solyanka(AceProxyPlugin):
         headers = {'User-Agent': 'Super Browser'}
         response = requests.get(url, headers=headers, proxies=config.proxies, stream=False, timeout=30)
         content = response.content if response.status_code == 200 else ''
-        return content if not tail else self.prepare_tail_m3u(urlparse(url).hostname.encode(), content)
+        return self.prepare_m3u(urlparse(url).hostname.encode(), content, tail)
 
     def collect_playlists(self):
         Solyanka.playlisttime = int(time.time())
@@ -68,10 +75,9 @@ class Solyanka(AceProxyPlugin):
         if Solyanka.playlist is None or (int(time.time()) - Solyanka.playlisttime > 20 * 60):
             if not self.collect_playlists(): connection.dieWithError(); return
 
-
         if path == '/solyanka/playlist.m3u':
             data = Solyanka.playlist
-            #TODO not modified status
+            # TODO not modified status
             connection.send_response(200)
             connection.send_header('Content-Type', 'audio/mpegurl; charset=utf-8')
             try:
