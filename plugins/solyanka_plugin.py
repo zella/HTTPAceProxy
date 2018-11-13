@@ -27,31 +27,31 @@ class Solyanka(AceProxyPlugin):
     def __init__(self, AceConfig, AceStuff):
         pass
 
-    def prepare_m3u(self, header: bytes, m3u: bytes, tail: bool):
+    def prepare_m3u(self, header, m3u, tail):
 
-        def update_extinf(extinf: bytes):
-            splitted = extinf.split(b',')
-            name = splitted[1] if len(splitted) >= 2 else b'no name'
-            if b'group-title' not in ext_inf.lower() or tail:
-                return b'#EXTINF:-1 group-title="%b",%b' % (header, name)
+        def update_extinf(ext_inf):
+            splitted = ext_inf.split(',')
+            name = splitted[1] if len(splitted) >= 2 else 'no name'
+            if 'group-title' not in ext_inf.lower() or tail:
+                return '#EXTINF:-1 group-title="%s",%s' % (header, name)
             else:
                 return ext_inf
 
         by_lines = m3u.splitlines()
         transformed = []
         for line in by_lines:
-            if line.startswith(b'#EXTINF'):
+            if line.startswith('#EXTINF'):
                 ext_inf = update_extinf(line)
                 transformed.append(ext_inf)
                 if tail:
-                    transformed.append(b"#EXTGRP:%b" % header)
-            elif line.startswith(b'http'):
+                    transformed.append("#EXTGRP:%s" % header)
+            elif line.startswith('http'):
                 transformed.append(line)
-            elif line.startswith(b'#EXTM3U') and not tail:
+            elif line.startswith('#EXTM3U') and not tail:
                 transformed.append(line)
-        return b'\n'.join(transformed)
+        return '\n'.join(transformed)
 
-    def download_playlist(self, url: str, tail: bool):
+    def download_playlist(self, url, tail):
         headers = {'User-Agent': 'Super Browser'}
         response = requests.get(url, headers=headers, proxies=config.proxies, stream=False, timeout=30)
         content = response.content if response.status_code == 200 else ''
@@ -63,8 +63,8 @@ class Solyanka(AceProxyPlugin):
         head_playlist = self.download_playlist(head, tail=False)
         tail_playlists = list(map(lambda x: self.download_playlist(x, tail=True), tail))
         summary_playlists = [head_playlist] + tail_playlists
-        Solyanka.playlist = b'\n'.join(summary_playlists)
-        return next((x for x in Solyanka.playlist.split(b'\n') if x.startswith(b'http')), None) is not None
+        Solyanka.playlist = '\n'.join(summary_playlists)
+        return next((x for x in Solyanka.playlist.split('\n') if x.startswith('http')), None) is not None
 
     def handle(self, connection, headers_only=False):
 
