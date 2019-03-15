@@ -6,5 +6,4 @@ proxies = None
 
 # Insert your allfon.tv playlist URL here
 playlists_urls = ['https://smarttvnews.ru/apps/iptvchannels.m3u',
-                  'http://54.39.49.10:25461/get.php?username=GermanEduardoGallegos&password=Fra0vr4keR&type=m3u',
-                  'http://servidoriptv.mine.nu:37001/get.php?username=nathaly&password=123456&type=m3u_plus']
+                  'http://127.0.0.1:8000/torrenttv/playlist.m3u']

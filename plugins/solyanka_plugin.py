@@ -54,8 +54,8 @@ class Solyanka(AceProxyPlugin):
     def download_playlist(self, url, tail):
         headers = {'User-Agent': 'Super Browser'}
         response = requests.get(url, headers=headers, proxies=config.proxies, stream=False, timeout=30)
-        content = response.content if response.status_code == 200 else ''
-        return self.prepare_m3u(urlparse(url).hostname.encode(), content, tail)
+        text = response.text if response.status_code == 200 else ''
+        return self.prepare_m3u(urlparse(url).hostname.encode(), text, tail)
 
     def collect_playlists(self):
         Solyanka.playlisttime = int(time.time())
@@ -93,7 +93,7 @@ class Solyanka(AceProxyPlugin):
             connection.send_header('Connection', 'close')
             connection.end_headers()
 
-            connection.wfile.write(data)
+            connection.wfile.write(data.encode())
         else:
             connection.send_response(400)
             connection.send_header('Connection', 'close')
